@@ -57,7 +57,7 @@ Cambricon中的数据传送指令支持不同的数据大小以实现对于向�
 图3中是VLOAD(Vector LOAD)指令的指令格式，VLOAD指令可以按`V_size`指令的数据块大小从主存到片上暂存器上传送数据，主存中数据的源地址为通用寄存器`Reg2`中所存数据和立即数`Immed`的和。其他数据传送指令，如VSTORE(Vector STORE)、MLOAD(Matrix LOAD)、MSTORE(Matrix STORE)的格式与VLOAD相同。
 
 ![Vector Load (VLOAD) instruction](https://github.com/wwqqqqq/2018s-final-projects/raw/master/figures/4.png)
-<center>Figure 3. Vector Load (VLOAD) instruction.</center>
+<h1 style="text-align:center">Figure 3. Vector Load (VLOAD) instruction.</h1>
 
 
 # 参考文献
