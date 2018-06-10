@@ -97,27 +97,41 @@ The fact that the C++11 memory model allows non-SC behaviors poses a problem for
 
 The paper gives a design that can enable exploration of a large fragment of the non-SC executions allowed by C++11. The essential idea is as follows: every atomic store is intercepted, and information relating to the store is recorded in a store buffer. Every atomic load is also intercepted, and the *store buffer* is queried to determine the set of possible stores that the load may acceptably read from. 
 
+### Post-Store Buffering
+
 Consider the case where a thread performs an atomic store to an atomic location. Depending on the state of the thread and the memory order used, atomic loads should be able to read from this store, even if there has been an intervening store to the same location. We will therefore record the atomic stores to each location in a buffer, allowing the instrumentation library to search though and pick a valid store to read from. 
 
-On intercepting a store to location $m$, the VC updates are performed, to facilitate race checking. The value to be stored to $m$ is then placed in the store buffer for m. Each individual store in the store buffer is referred to as a store element, and contains a snapshot of the state of the location at the time the store was performed. This snapshot includes the meta-data required to ensure that each load can be certain that reading from the store will lead to a consistent execution. 
+On intercepting a store to location $m$, the VC updates are performed, to facilitate race checking. The value to be stored to $m$ is then placed in the store buffer for $m$. Each individual store in the store buffer is referred to as a *store element*, and contains a snapshot of the state of the location at the time the store was performed. This snapshot includes the meta-data required to ensure that each load can be certain that reading from the store will lead to a consistent execution. 
+
+### Coherence rules
 
 In C++11 memory model, there are four coherence rules:
 
-* **Coherence of write-write**: Synchronization follows the *rf* relation (and *sb* when fences are involved), and as a load can only read from a store already in the store buffer, *mo* must conform with *rf* .
-* **Coherence of write-read**: a load cannot read from a store if there is another store later in *mo* such that said store happens before the current load. 
-* **Coherence of read-write**: a load cannot read from a store if there is another store earlier in *mo* that happens after the current load. 
-* **Coherence of read-read**:  t if two reads from the same location are ordered by *hb*, the reads cannot observe writes ordered differently in *mo*
+* **Coherence of write-write**(**CoWW**): Synchronization follows the *rf* relation (and *sb* when fences are involved), and as a load can only read from a store already in the store buffer, *mo* must conform with *rf* .
+* **Coherence of write-read**(**CoWR**): a load cannot read from a store if there is another store later in *mo* such that said store happens before the current load. 
+* **Coherence of read-write**(**CoRW**): a load cannot read from a store if there is another store earlier in *mo* that happens after the current load. 
+* **Coherence of read-read**(**CoRR**):  t if two reads from the same location are ordered by *hb*, the reads cannot observe writes ordered differently in *mo*
 
-SC fences add a layer of complexity to what the memory model allows. An SC fence will interact with other SC fences and reads in a number of ways:
+It can be proved that **CoWW** holds in the formalization. 
 
-* $W_{non-SC}\stackrel{sb}{\rightarrow}F_{sc}\stackrel{sc, inter}{\longrightarrow}R_{SC}$: The SC read must read from the last write sequenced before the SC fence, or any write later in modification order. Non-SC reads are unaffected. 
-*  $W_{SC}\stackrel{sc, inter}{\longrightarrow}F_{sc}\stackrel{sb}{\rightarrow}R_{non-SC}$: The non-SC read must read from the SC write, or a write later in modification order. If there is no SC write, then the read is unaffected. 
-* $W_{non-SC}\stackrel{sb}{\rightarrow}F_{sc}\stackrel{sc, inter}{\longrightarrow}F_{sc}\stackrel{sb}{\rightarrow}R_{SC}$: Any read sequenced after the SC fence must read from the last write sequenced before the SC fence, or a write later in modification order.
-* $W_SC;R_SC$: The SC read must read from the last SC write, a write later in *mo* than the last SC write, or a non-SC write that does not happen before some SC write to the same location. 
+The instrumentation library automatically conforms to **CoRW**. This is because violating **CoRW** would require a thread to read from a store that has not yet been added to the store buffer for a location, something our instrumentation does not allow. This is illustrated by the execution fragment shown for **CoRW** above. This reasoning also assumes that we follow the *hb* relation. 
 
-The paper gives an algorithm to conform with these coherence rules in the extended vector clock algorithm.
+For **CoWR**, each store element must record sufficient information to allow a thread issuing a load to determine whether the store happened before the load. To enable this, the id of the storing thread must be recorded when a store element is created, together with the epoch associated with the thread when the store was issued. When a load is issued, the instrumentation library can then search the store buffer to find the latest store in *mo* that happened before the current load; all stores prior to the identified store are cut off from the perspective of the loading thread. This is achieved by searching the buffer backwards, from the most recent store. For a given store element, let $c@t$ be the epoch of the thread that performed the store. With C denoting the VC of the loading thread, if $c\leq\mathbb{C}_t$ then the store will happen before the load, so we halt the search.    
 
+To ensure **CoRR**, it is thus necessary for a thread to be aware of loads performed by other threads. To handle this, we equip our instrumentation library with software load buffers as follows. We augment every store element with a list of *load elements*. When a thread reads from a store element, a new load element is created and added to the list of load elements associated with said store element. Each load element records the id of the thread that issued the load, and the epoch associated with the thread when the load was issued. Whenever our instrumentation library is searching through the store buffer for the earliest store that a load is allowed to read from, it must also search through all the load elements associated with each store element. For a load element under consideration, let $c@t$ be the epoch of the thread that carried out the load, and $\mathbb{C}$ the VC of the thread that is currently performing a load. If $c\leq\mathbb{C}_t$, then the load associated with the load element happened before the current load, and we must halt the search.    
 
+### Sequential Consistent Fences
+
+SC fences also add a layer of complexity to what the memory model allows. An SC fence will interact with other SC fences and reads in a number of ways:
+
+1. $W_{non-SC}\stackrel{sb}{\rightarrow}F_{sc}\stackrel{sc, inter}{\longrightarrow}R_{SC}$: The SC read must read from the last write sequenced before the SC fence, or any write later in modification order. Non-SC reads are unaffected. 
+2. $W_{SC}\stackrel{sc, inter}{\longrightarrow}F_{sc}\stackrel{sb}{\rightarrow}R_{non-SC}$: The non-SC read must read from the SC write, or a write later in modification order. If there is no SC write, then the read is unaffected. 
+3. $W_{non-SC}\stackrel{sb}{\rightarrow}F_{sc}\stackrel{sc, inter}{\longrightarrow}F_{sc}\stackrel{sb}{\rightarrow}R_{SC}$: Any read sequenced after the SC fence must read from the last write sequenced before the SC fence, or a write later in modification order.
+4. $W_SC;R_SC$: The SC read must read from the last SC write, a write later in *mo* than the last SC write, or a non-SC write that does not happen before some SC write to the same location. 
+
+Accommodating SC fences in our instrumentation library is not trivial, requiring additional VCs and VC manipulation on every SC operation. We begin by defining two global VCs: $\mathbb{S}_F$ , representing the epoch of the last SC fence performed by each thread, and $\mathbb{S}_W$ , the epoch of the last SC write performed by each thread. Each thread will update its position in these VCs whenever they perform an SC fence or SC write    
+
+Each thread t now has an extra three VCs: $\$_{F,t}$, $\$_{W,t}$ and $\$_{R,t}$. Each VC will control each of the three cases outlined above. These are updated when the thread performs an SC operation. When a thread performs an SC fence, it will acquire the two global SC VCs: $\$_{F,t} :=  \$_{F,t}\cup \mathbb{S}_F$and  $\$_{W,t} :=  \$_{W,t}\cup \mathbb{S}_W$ . When a thread performs an SC read, it will acquire the global SC fence VC in the following way:  $\$_{R,t} :=  \$_{R,t}\cup \mathbb{S}_F$. To see how this enforces the rules outlined above, consider a thread t that is performing an atomic load on location x. While searching back through the buffer, we have reached a store performed by thread u at epoch c@u. If the load is an SC load, and $\$_{R,t}(u) \geq c$, then we halt the search according to (1). If the store is an SC store, and $\$_{W,t}(u) ≥ c$, then we halt the search according to (2). Regardless of whether the load or the store is SC, if $\$_{F,t}(u) \geq c$ then (3) applies. To handle (4), each store element must be marked with a flag indicating whether it was an SC store. Additionally, every store element that happens before the current store must also be marked as a SC store. When an SC load has searched back through the buffer and found the earliest feasible store to read from, it may read from any store element that is unmarked, or the last marked element.    
 
 ## Implementations and Evaluations
 
@@ -133,7 +147,7 @@ They also runs it on large applications, i.e. Chrome and Firefox.
 
 ![1528641439588](./1528641439588.png)
 
-**FF** means running with original Firefox, **FF03** means running with tsan03, **FF11** means running with tsan11. The same for **CR**, which stands for Chromium. Though tsan11 detect more races than tsan03, it brings huge overhead to programs.
+**FF** means running with original Firefox, **FF03** means running with tsan03, **FF11** means running with tsan11. The same for **CR**, which stands for Chromium. Though tsan11 detect more races than tsan03, it puts a huge overhead to programs.
 
 ## Conclusion
 
