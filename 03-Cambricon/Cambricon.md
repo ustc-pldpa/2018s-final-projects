@@ -84,17 +84,75 @@ MLP由三层或更多层（具有一个或多个隐藏层的输入层和输出�
 <center>Figure 4. Typical operations in NNs.</center>
 
 输出神经元$ y_i $ (*i* = 1, 2, 3)可以由以下公式计算:
+
 ![](http://latex.codecogs.com/gif.latex?y_i=f(\\sum_{j=1}^3w_{ij}x_j+b_i))
+
 这里的x<sub>j</sub>为第j个输入神经元，w<sub>ij</sub>为第i个输出神经元和第j个输入神经元之间的权重，b<sub>i</sub>为第i给输出神经元对应的偏置(bias)，*f*为激活函数。
 
 输出神经元的计算还可以转化为向量运算：
+
 ![](http://latex.codecogs.com/gif.latex?\\vec{y}=\\vec{f}(W\\vec{x}+\\vec{b})\\tag{1})
+
 其中，**y** = (y<sub>1</sub>, y<sub>2</sub>, y<sub>3</sub>)，**x** = (x<sub>1</sub>, x<sub>2</sub>, x<sub>3</sub>)，**b** = (b<sub>1</sub>, b<sub>2</sub>, b<sub>3</sub>)，分别为输出神经元的值的向量，输入神经元向量，和输入神经元对应的bias。W = (w<sub>ij</sub>)为权值矩阵，**f**为每个元素对应的激活函数*f*。
 
 公式(1)中的关键步骤是计算W**x**，在Cambricon中。这一步由`Maxtrix-Mult-Vector`(MMV)指令完成，该指令格式如图5所示。
 ![Matrix Mult Vector (MMV) instruction](https://github.com/wwqqqqq/2018s-final-projects/raw/master/figures/6.png)
 <center>Figure 5. Matrix Mult Vector (MMV) instruction.</center>
 
+`Reg0`存放输出向量的内存基地址(存储在片上暂存器中)`Vout_addr`；`Reg1`为输出向量的大小`Vout_size`；`Reg2`, `Reg3`, `Reg4`分别存有输入矩阵的基地址`Min_addr`，输入向量的基地址`Vin_addr`和输入向量的大小`Vin_size`，`Vin_size`在不同的指令中是可变的。
+
+MMV指令支持任意比例的矩阵-向量乘法，只要所有的输入、输出数据都可以同时被存放在暂存存储器中。
+
+在Cambricon中，使用MMV指令来计算W**x**，而不是将这一操作分解成多个向量点乘，因为后者对于矩阵M的不同行重复地使用了向量**x**，带了了很多额外的问题，如同步、对同一地址的并发读写请求等，降低了操作的效率。
+
+然而，MMV指令不提供对于反向训练(backforward training)过程的有效支持。反向传播(Back Propagation, BP)是一种用于人工神经网络的方法，它的关键步骤即为计算梯度向量，该向量又被用来计算神经网络中的权重，即使用梯度下降算法，用来通过计算损失函数的梯度来调整神经元的权重。[5]
+
+梯度向量可以被表示为一个向量乘以一个矩阵。如果要使用MMV指令来完成这种计算，还需要一条额外的矩阵转置指令来实现，而矩阵转置需要的数据在内存中移动的开销较大，为此，Cambricon中还实现了一条`Vector-Mult-Matrix`(VMM)指令，VMM指令即可直接用于反向传播算法的backforward训练过程。VMM指令的格式和MMV相同，操作码不同。
+
+此外，在训练神经网络时，权重矩阵W通常需要用公式![](http://latex.codecogs.com/gif.latex?W=W+\\eta\\,\\Delta\\,W)来进行更新，其中![](http://latex.codecogs.com/gif.latex?\\eta)为学习速度(learning rate)，![](http://latex.codecogs.com/gif.latex?\\Delta\\,W)为两个向量的外积。为了高效实现权值的更新，Cambricon中提供了`Outer-Product`(OP)指令、`Matrix-Mult-Scalar`(MMS)指令、`Matrix-Add-Matrix`(MAM)指令来进行协同操作。
+
+此外，Cambricon中还有一个`Matrix-Subtract-Matrix`(MSM)指令来更好地支持受限波尔茨曼机(Restricted Boltzmann Machine, RBM)中的权重更新。
+
+故Cambricon中的6个矩阵计算指令有：MMV, VMM, OP, MMS, MAM, MSM.
+
+#### 向量指令
+仍然以公式(1)为例，可以看出上一节中的矩阵指令不足以定义该公式中的所有计算。例如，W**b**的结果和**b**都为向量，同时对W**x**+**b**的结果也需要做一个逐向量的映射**f**。对于向量加法W**x**+**b**，Cambricon中有直接支持的指令`Vector-Add-Vector`(VAV)，但对于逐向量的激活函数(element-wise activation)，还是需要多条指令才能完成。这里使用一个非常常用的激活函数sigmoid函数为例来加以说明。
+
+Sigmoid函数由以下公式定义：
+
+![](http://latex.codecogs.com/gif.latex?S(x)=\\frac{1}{1+e^{-x}}=\\frac{e^x}{e^x+1})
+
+对输入向量**a**执行sigmoid激活函数可以分解为3个连续步骤，这三个步骤分别由3条指令支持：
+| 步骤 | Cambricon中对应的指令 |
+|----- | ------ |
+|对于**a**中的每个元素，计算![](http://latex.codecogs.com/gif.latex?e^{a_i})，i = 1, ..., n | `Vector-Exponential` (VEXP) |
+| 将向量![](http://latex.codecogs.com/gif.latex?(e^{a_i},...,e^{a_n}))中的每个元素加1 | `Vector-Add-Scalar`(VAS) |
+| 对于每个i, i = 1, ..., n，计算![](http://latex.codecogs.com/gif.latex?\\frac{e^{a_i}}{e^{a_i}+1})的值 | `Vector-Div-Vector`(VDV) |
+
+不过尽管非常常用，sigmoid函数并不是现有NN技术使用的唯一的激发函数，为了支持多种不同的激发函数，Cambricon还提供了一系列的向量算术指令，如`Vector-Mult-Vector`(VMV), `Vector-Sub-Vector`(VSV), `Vector-Logarithm`(VLOG)。
+
+在计算对数函数、三角函数、反三角函数等超越函数时，可以使用CORDIC算法(Coordinate Rotation Digital Computer, or Volder's algorithm)，CORDIC算法通常在没有硬件乘法器可用时使用，因为它所需要的唯一操作是加法、减法、位移和查表操作[6][7][8][9]。所以，在设计硬件加速器时，使用CORDIC算法，即可使与不同超越函数相关的指令，得以有效地重复使用相同的功能块(包括加减法、移位、查表操作等)。
+
+此外，随机生成向量也是在很多NN技术(如dropout、random sampling)应用的重要操作，但在很多科学计算定义的传统线性代数库(如BLAS)中，都忽视了这个操作。Cambricon提供了一个指令`Random-Vector`(RV)来生成一个随机向量，向量元素的值的生成符合在区间[0, 1]上的均匀分布。有了可以实现均匀分布随机的向量，使用Ziggurat算法，结合其他的向量算术指令和向量比较指令，可以在此基础上实现其他的分布，如高斯分布等。[10]
+
+#### 逻辑指令
+
+很多最先进的NN技术都使用了一些结合了比较等逻辑操作的技术，如max-pooling操作(见图6.a)，它在一个pooling窗口中取其中具有最大输出的神经元，并且在不同的输入特征映射中，对所有对应的pooling窗口重复这一操作，见图6.b。
+
+![Max-pooling operation](https://github.com/wwqqqqq/2018s-final-projects/raw/master/figures/7.png)
+<center>Figure 6. Max-pooling operation.</center>
+
+Cambricon中使用`Vector-Greater-Than-Merge`(VGTM)指令来帮助实现max-pooling操作。VGTM指令通过比较输入向量`Vin0`和`Vin1`中的对应元素，来指定输出向量(`V_out`)中的所有元素：
+```C
+Vout[i] = (Vin0[i] > Vin1[i])? Vin0[i] : Vin1[i];
+```
+![Vector Greater Than Merge (VGTM) instruction](https://github.com/wwqqqqq/2018s-final-projects/raw/master/figures/9.png)
+<center>Figure 7. Vector Greater Than Merge (VGTM) instruction.</center>
+
+下面即为pooling操作的Cambricon汇编实现：
+![Pooling code](https://github.com/wwqqqqq/2018s-final-projects/raw/master/figures/8.png)
+
+除了向量计算指令外，Cambricon还提供了一些列向量比较指令(`Vector-Greater-than`(VGT), `Vector-Equal`(VE), `Vector AND/OR/NOT`(VAND/VOR/VNOT))，标量比较指令，及标量逻辑指令来计算分支条件。
 
 
 
@@ -106,4 +164,17 @@ MLP由三层或更多层（具有一个或多个隐藏层的输入层和输出�
 
 [3] Rumelhart, David E., Geoffrey E. Hinton, and R. J. Williams. "Learning Internal Representations by Error Propagation". David E. Rumelhart, James L. McClelland, and the PDP research group. (editors), Parallel distributed processing: Explorations in the microstructure of cognition, Volume 1: Foundation. MIT Press, 1986.
 
-[4]Cybenko, G. 1989. Approximation by superpositions of a sigmoidal function Mathematics of Control, Signals, and Systems, 2(4), 303–314.
+[4] Cybenko, G. 1989. Approximation by superpositions of a sigmoidal function Mathematics of Control, Signals, and Systems, 2(4), 303–314.
+
+[5] Deep Learning; Ian Goodfellow, Yoshua Bengio, Aaaron Courville; MIT Press; 2016, p 196.
+
+[6] V. Kantabutra. On hardware for computing exponential and trigonometric functions. Computers, IEEE Transactions on, 1996.
+
+[7] Volder, Jack E. (1959-03-03). "The CORDIC Computing Technique". Proceedings of the Western Joint Computer Conference (WJCC) (presentation). San Francisco, California, USA: National Joint Computer Committee (NJCC): 257–261. Retrieved 2016-01-02.
+
+[8] Volder, Jack E. (1959-05-25). "The CORDIC Trigonometric Computing Technique". IRE Transactions on Electronic Computers. The Institute of Radio Engineers, Inc. (IRE) (published September 1959). 8 (3): 330–334 (reprint: 226–230). EC-8(3):330–334. Retrieved 2016-01-01.
+
+[9] Swartzlander, Jr., Earl E. (1990). Computer Arithmetic. 1 (2 ed.). Los Alamitos: IEEE Computer Society Press. ISBN 9780818689314. 0818689315. Retrieved 2016-01-02.
+
+[10] G Marsaglia and W W. Tsang. The ziggurat method for generating
+random variables. Journal of statistical software, 2000.
