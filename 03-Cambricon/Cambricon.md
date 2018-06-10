@@ -85,13 +85,13 @@ MLP由三层或更多层（具有一个或多个隐藏层的输入层和输出�
 
 输出神经元$ y_i $ (*i* = 1, 2, 3)可以由以下公式计算:
 ![](http://latex.codecogs.com/gif.latex?y_i=f(\\sum_{j=1}^3w_{ij}x_j+b_i))
-这里的$ x_j $为第$j$个输入神经元，$ w_{ij} $为第$i$个输出神经元和第$j$个输入神经元之间的权重，$ b_i $为第$i$给输出神经元对应的偏置(bias)，$f$为激活函数。
+这里的x<sub>j</sub>为第j个输入神经元，w<sub>ij</sub>为第i个输出神经元和第j个输入神经元之间的权重，b<sub>i</sub>为第i给输出神经元对应的偏置(bias)，*f*为激活函数。
 
 输出神经元的计算还可以转化为向量运算：
 ![](http://latex.codecogs.com/gif.latex?\\vec{y}=\\vec{f}(W\\vec{x}+\\vec{b})\\tag{1})
-其中，$\vec{y} = (y_1, y_2, y_3)$，$\vec{x} = (x_1, x_2, x_3)$，$\vec{b} = (b_1, b_2, b_3)$，分别为输出神经元的值的向量，输入神经元向量，和输入神经元对应的bias。$W = (w_{ij})$为权值矩阵，$\vec{f}$为每个元素对应的激活函数$f$。
+其中，**y** = (y<sub>1</sub>, y<sub>2</sub>, y<sub>3</sub>)，**x** = (x<sub>1</sub>, x<sub>2</sub>, x<sub>3</sub>)，**b** = (b<sub>1</sub>, b<sub>2</sub>, b<sub>3</sub>)，分别为输出神经元的值的向量，输入神经元向量，和输入神经元对应的bias。W = (w<sub>ij</sub>)为权值矩阵，**f**为每个元素对应的激活函数*f*。
 
-公式$(1)$中的关键步骤是计算$W\vec{x}$，在Cambricon中。这一步由`Maxtrix-Mult-Vector`(MMV)指令完成，该指令格式如图5所示。
+公式(1)中的关键步骤是计算W**x**，在Cambricon中。这一步由`Maxtrix-Mult-Vector`(MMV)指令完成，该指令格式如图5所示。
 ![Matrix Mult Vector (MMV) instruction](https://github.com/wwqqqqq/2018s-final-projects/raw/master/figures/6.png)
 <center>Figure 5. Matrix Mult Vector (MMV) instruction.</center>
 
