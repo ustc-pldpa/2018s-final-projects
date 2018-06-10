@@ -62,7 +62,7 @@ atomicModifyIORef :: IORef a -> (a -> (a,b)) -> IO b
 atomicModifyIORef (IORef (STRef r#)) f = IO $ \s -> atomicModifyMutVar# r# f s
 ```
 
-尽管有原子化的操作，但不意味着可以用其来进行同步的控制，因为没有提供阻塞的方法。除此之外，其对异常的处理也不是很安全。MVar是定义在IO上的互斥变量，可以用之来保护互斥数据，或者进行加锁的操作。MVar同时提供了阻塞和非阻塞的访问方式，可以说十分的灵活。不出意外的，MVar来自底层`MVar#`的包装，其操作函数也是一系列底层函数的包装。
+尽管有原子化的操作，但不意味着可以用其来进行同步的控制，因为没有提供阻塞的方法。除此之外，其对异常的处理也不是很安全。`MVar`是定义在IO上的互斥变量，可以用之来保护互斥数据，或者进行加锁的操作。`MVar`同时提供了阻塞和非阻塞的访问方式，可以说十分的灵活。不出意外的，`MVar`来自底层`MVar#`的包装，其操作函数也是一系列底层函数的包装。
 
 ```haskell
 data MVar a = MVar (MVar# RealWorld a)
@@ -73,12 +73,12 @@ readMVar (MVar mvar#) = IO $ \ s# -> readMVar# mvar# s#
 takeMVar :: MVar a -> IO a
 takeMVar (MVar mvar#) = IO $ \ s# -> takeMVar# mvar# s#
 
-putMVar  :: MVar a -> a -> IO ()
+putMVar :: MVar a -> a -> IO ()
 putMVar (MVar mvar#) x = IO $ \ s# ->
     case putMVar# mvar# x s# of s2# -> (# s2#, () #)
 ```
 
-当MVar中的值被take走之后，视当前MVar中的值离开了MVar对象，直到再有新的值被放入。利用这样的同步特性，可以使得`forkIO`产生的线程和主线程同步。这里自定义了`Thread`类型和`fork`，`wait`函数。注意由于自定义的`Thread`不是单子，所以和MonadFork的`fork`类型冲突。
+当`MVar`中的值被take走之后，视当前`MVar`中的值离开了`MVar`对象，直到再有新的值被放入。利用这样的同步特性，可以使得`forkIO`产生的线程和主线程同步。这里自定义了`Thread`类型和`fork`，`wait`函数。注意由于自定义的`Thread`不是单子，所以和MonadFork的`fork`类型冲突。
 
 ```haskell
 data Thread = Thread (MVar ())
@@ -93,7 +93,9 @@ wait (Thread mutex) = takeMVar mutex
 
 这样，我们就可以使用`fork`来得到新线程，然后使用`wait`来进行同步，其原理就是使用MVar在线程间传递信息。当然，这里是简单的自定义实现，忽略了异常处理的复杂性。
 
-尽管MVar提供了阻塞，但是其数据的访问速度不如`IORef`。虽然，在只有金额的账户类型中，使用两者结合的形式并不会提升效率，但在接下来的一个银行账户的样例程序中，还是使用MVar来构建锁，而用`IORef`来描述变量，毕竟这样更能模拟一般的使用场景。
+#### 2.1. 简单的小程序I
+
+尽管`MVar`提供了阻塞，但是其数据的访问速度不如`IORef`。虽然，在只有金额的账户类型中，使用两者结合的形式并不会提升效率，但在接下来的一个银行账户的样例程序中，还是使用MVar来构建锁，而用`IORef`来描述变量，毕竟这样更能模拟一般的使用场景。
 
 ```haskell
 data Account = Account (IORef Int) (MVar ())
@@ -122,12 +124,207 @@ main = do
   t2 <- fork $ replicateM_ 100 $ withdrawAccount account 2
   pure $ wait <$> [t1, t2]
   print =<< readAccount account
-
 ```
 
 ### 3. STM上的变量和同步机制
 
+加入我们为上面的模型增加`transferAccount`操作，那么就需要把`depositAccount`和`withdrawAccount`合起来成为一个事务。否则如果一边的取进行顺利而另一边的存出现异常，或者相反——都会违背我们的意图。STM通过`atomically`将一系列STM单子上的运算变为IO上的原子操作，从而描述了事务。为此，需要重新包装产生新的变量类型来应用在STM运算上。先来实现一下`IORef`的替代品`TVar`。
 
+```haskell
+newtype TVar a = TVar (IORef a)
+
+newTVar :: a -> STM (TVar a)
+newTVar a = STM $ const $ newTVarIO a
+
+readTVar :: TVar a -> STM a
+readTVar (TVar ref) = STM $ const $ readIORef ref
+
+writeTVar :: TVar a -> a -> STM ()
+writeTVar (TVar ref) a = STM $ \r -> do
+    oldval <- readIORef ref
+    modifyIORef r $ writeIORef ref oldval >>
+    writeIORef ref a
+```
+
+同样的，借助`Maybe`类型，可以将`TVar`推广到`TMVar`。
+
+```haskell
+newtype TMVar a = TMVar (TVar (Maybe a))
+
+newTMVar :: a -> STM (TMVar a)
+newTMVar a = do
+  t <- newTVar $ Just a
+  return $ TMVar t
+
+takeTMVar :: TMVar a -> STM a
+takeTMVar (TMVar t) = do
+  m <- readTVar t
+  case m of
+    Nothing -> retry
+    Just a  -> do 
+    	writeTVar t Nothing
+        return a
+    
+putTMVar :: TMVar a -> a -> STM ()
+putTMVar (TMVar t) a = do
+  m <- readTVar t
+  case m of
+    Nothing -> do 
+    	writeTVar t (Just a)
+    	return ()
+    Just _ -> retry
+```
+
+`TMVar`可视作`MVar`在STM的替代品，其通过`retry`来在内容为`Nothing`时达成阻塞。同时，我们也很容易得到非阻塞读取或写入的方法——直接根据模式匹配的结果返回`True`并执行操作或返回`False`。
+
+#### 3.1. 简单的小程序II
+
+同样是描述银行存取款的程序，看一下`TVar`的使用以及STM的`retry-orElse`单位半群的运行方式。
+
+```haskell
+module Main where
+
+import Control.Monad
+import Control.Applicative
+import Control.Concurrent
+import Control.Concurrent.STM
+
+data Account = Account (TVar Int)
+
+newAccount balance = do
+  balance' <- newTVar balance
+  return $ Account balance'
+
+readAccount (Account balance) = do
+  balance' <- readTVar balance
+  return balance'
+
+withdrawAccount (Account balance) value = do
+  balance' <- readTVar balance
+  check $ balance' >= value
+  writeTVar balance $ balance' - value
+
+depositAccount (Account balance) value = do
+  balance' <- readTVar balance
+  writeTVar balance $ balance' + value
+
+transferAccount accountFrom accountTo value = do
+  withdrawAccount accountFrom value
+  depositAccount accountTo value
+
+main = do
+  success <- atomically $ newTVar False
+  accountFrom <- atomically $ newAccount 0
+  accountTo <- atomically $ newAccount 2000
+  let printAccount = do
+        print =<< atomically (readAccount accountFrom)
+        print =<< atomically (readAccount accountTo)
+        print =<< atomically (readTVar success)
+  let c1 = do
+        writeTVar success True
+        transferAccount accountFrom accountTo 1
+      c2 = do
+        return ()
+    in atomically $ c1 <|> c2
+  printAccount
+  -- 0
+  -- 2000
+  -- False
+  let c1 = do
+        writeTVar success True
+        transferAccount accountTo accountFrom 1
+      c2 = do
+        return ()
+    in atomically $ c1 <|> c2
+  printAccount
+  -- 1
+  -- 1999
+  -- True
+```
+
+从运行结果可以看出，尽管c1的写操作在转账操作之前，但是一旦转账操作失败而执行另一个分支c2成功后，`success`并没有被写入。上面的程序没有使用互斥的变量，这就意味着它在并发时可能会有错误。接下来用`TMVar`结合`TVar`来改写。
+
+#### 3.2. 简单的小程序III
+
+```haskell
+module Main where
+
+import Control.Monad
+import Control.Applicative
+import Control.Concurrent
+import Control.Concurrent.STM
+
+data Thread = Thread (MVar ())
+
+fork f = do
+ls  mutex <- newEmptyMVar
+  forkIO $ f >> putMVar mutex ()
+  return $ Thread mutex
+
+wait (Thread mutex) = takeMVar mutex
+
+data Account = Account (TVar Int) (TMVar ())
+
+newAccount balance = do
+  mutex <- newTMVar ()
+  balance' <- newTVar balance
+  return $ Account balance' mutex
+
+readAccount (Account balance mutex) = do
+  balance' <- readTVar balance
+  return balance'
+
+withdrawAccount (Account balance mutex) value = do
+  takeTMVar mutex
+  balance' <- readTVar balance
+  check $ balance' >= value
+  writeTVar balance $ balance' - value
+  putTMVar mutex ()
+
+depositAccount (Account balance mutex) value = do
+  takeTMVar mutex
+  balance' <- readTVar balance
+  writeTVar balance $ balance' + value
+  putTMVar mutex ()
+
+transferAccount accountFrom accountTo value = do
+  withdrawAccount accountFrom value
+  depositAccount accountTo value
+
+main = do
+  accountFrom <- atomically $ newAccount 0
+  accountTo <- atomically $ newAccount 0
+  t1 <- fork $ replicateM_ 100 $ atomically $ depositAccount accountFrom 20
+  t2 <- fork $ replicateM_ 100 $ atomically $ transferAccount accountFrom accountTo 10
+  t3 <- fork $ replicateM_ 100 $ atomically $ transferAccount accountFrom accountTo 10
+  pure $ wait <$> [t1, t2, t3]
+  print =<< atomically (readAccount accountFrom)
+  print =<< atomically (readAccount accountTo)
+```
+
+ 这里`TMVar`的操作和`MVar`中的一个不同是：作为锁的时候，后者推荐采用`with...`的形式，而前者没有这个必要。原因是如果将`TMVar`中的数据读走，而在之后又出现错误，也会因为事务的失败而得到数据没被读走的情况——这就不需要释放锁的操作。
+
+### 4. 使用STM实现异步
+
+先来说一下异步的目标：我们至少要实现两个函数，`async`和`await`。前者接受一个IO单子演算并异步地执行，而后者得到前者结果。另外，异步执行的程序可以主动或被动地放弃目前的执行资源，并在合理的时候被唤醒来完成剩下的任务。考虑到异步的异常处理比较复杂，不展开介绍`mask`等函数。
+
+```haskell
+data Async a = Async { asyncThreadId :: ThreadId, asyncWait :: STM (Either SomeException a) }
+
+async :: IO a -> IO (Async a)
+async action = do
+	var <- newEmptyTMVarIO
+	t <- mask $ \restore ->
+		forkIO $ try (restore action) >>= atomically . putTMVar var
+	return $ Async t $ readTMVar var
+
+await :: Async a -> IO a
+await a = atomically $ do
+	let Async (_ a') = a in r <- a'
+	either throwSTM return r
+```
+
+上面的实现简化了Control.Concurrent.Async中`Async`类型即相关函数的实现。标准库提供了很多实用的函数来构建异步操作，比如`cancel`、`race`、`concurrently`等。这些通过STM构建的操作简化了异步计算的实现方式的同时，**避免了这些函数的语法化**——就像大部分支持异步的语言所做的简化一样。在函数作为一等公民的情况下，我们就可以使用各种升格和代数操作来更简洁地完成计算。
 
 ### 参考资料
 
@@ -144,5 +341,11 @@ System.IO https://hackage.haskell.org/package/base-4.9.0.0/docs/System-IO.html
 Control.Concurrent https://hackage.haskell.org/package/base-4.9.1.0/docs/Control-Concurrent.html
 
 Control.Concurrent.MVar http://hackage.haskell.org/package/base-4.11.1.0/docs/Control-Concurrent-MVar.html
+
+Control.Concurrent.STM.TVar http://hackage.haskell.org/package/stm-2.4.5.0/docs/Control-Concurrent-STM-TVar.html
+
+Control.Concurrent.STM.TMVar http://hackage.haskell.org/package/stm-2.4.5.0/docs/Control-Concurrent-STM-TMVar.html
+
+Control.Concurrent.Async https://hackage.haskell.org/package/async-2.2.1/docs/Control-Concurrent-Async.html
 
 Control.Monad.Fork.Class http://hackage.haskell.org/package/monad-fork-0.1/docs/Control-Monad-Fork-Class.html
