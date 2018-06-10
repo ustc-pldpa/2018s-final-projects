@@ -19,7 +19,7 @@
 2. 功能简单、长度较短的指令可以有效地减少指令译码器设计和验证的复杂度，以及硬件开销/能耗。
 
 Cambricon是一种load-store型ISA，指令集中包含了标量、向量、矩阵、逻辑计算，数据迁移和控制指令，是基于对现有NN技术的综合分析设计而成。Cambricon ISA中所有的指令都为64位，有64个32位通用寄存器(General-Purpose Registers, GPRs)，这些通用寄存器主要用于控制和计算地址。为了支持对向量/矩阵数据的运算，综合效率和能耗的考虑，寒武纪体系结构中并没有使用向量寄存器，而是使用了程序员/编译器可见的片上高速暂存存储器(on-chip scratchpad memory)。片上存储器不需要像寄存器文件一样实现多个端口，而是可以将内存组织为多个独立的banks，根据块号(内存地址的低位)来进行多体交叉编址，在访存向量/矩阵数据时进行并行访问，以提高访存效率[1]。如果采用一般SIMD体系结构的做法，使用向量寄存器来进行向量的存储，整体的计算效率就会受制于寄存器的长度，而片上缓存中的bank宽度很容易就可以做到比寄存器宽度大，因此Cambricon可以支持较大的向量/长度不定的向量。
-![Four-way interleaved memory banks using block addressing](https://github.com/wwqqqqq/2018s-final-projects/raw/master/figures/1.png)
+![Four-way interleaved memory banks using block addressing](https://github.com/wwqqqqq/2018s-final-projects/raw/master/03-Cambricon/figures/1.png)
 <center>figure 1. Four-way interleaved memory banks using block addressing</center>
 
 
@@ -41,7 +41,7 @@ Cambricon是一种load-store型ISA，指令集中包含了标量、向量、矩�
 
 ### 寒武纪指令集概览
 整体上看，Cambricon包含四种指令：计算指令、逻辑指令、控制指令、数据传送指令。尽管每种指令需要的指令长度不同，但这里采用RISC指令集的思想，同时处于内存对齐和设计难度的考虑，将指令长度固定在64位。下表为Cambricon指令集的指令类型、支持操作数概览：
-![An overview to Cambricon instructions](https://github.com/wwqqqqq/2018s-final-projects/raw/master/figures/2.png)
+![An overview to Cambricon instructions](https://github.com/wwqqqqq/2018s-final-projects/raw/master/03-Cambricon/figures/2.png)
 <center>Table 1. An overview to Cambricon instruction.</center>
 
 Cambricon中的控制指令和数据传送指令很大程度上都类似MIPS指令集，但对于NN技术做出了一定的优化。
@@ -50,7 +50,7 @@ Cambricon中的控制指令和数据传送指令很大程度上都类似MIPS指�
 #### 控制指令
 类似于MIPS，Cambricon中有两种控制指令：跳转和条件分支指令，指令格式如图2所示。跳转指令通过一个立即数或通用寄存器来指令地址偏移，使程序跳转到`PC + {offset}`指定的地址位置。条件分支指令除了使用立即数或通用寄存器来指定地址偏移量外，还使用一个通用寄存器来确定是否跳转，如下图中的`Reg0`，指令译码/执行时，通过比较`Reg0`的值和0来判断是否跳转，如果确定跳转(branch taken)，跳转到`PC + {offset}`指定的地址，否则跳转到`PC + 1`。
 
-![Jump instruction and condition branch instruction](https://github.com/wwqqqqq/2018s-final-projects/raw/master/figures/3.png)
+![Jump instruction and condition branch instruction](https://github.com/wwqqqqq/2018s-final-projects/raw/master/03-Cambricon/figures/3.png)
 <center>Figure 2. <I>top</I>:Jump instruction. <I>bottom</I>: Condtion Branch (CB) instruction.</center>
 
 #### 数据传送指令
@@ -58,7 +58,7 @@ Cambricon中的数据传送指令支持不同的数据大小以实现对于向�
 
 图3中是VLOAD(Vector LOAD)指令的指令格式，VLOAD指令可以按`V_size`指令的数据块大小从主存到片上暂存器上传送数据，主存中数据的源地址为通用寄存器`Reg2`中所存数据和立即数`Immed`的和。其他数据传送指令，如VSTORE(Vector STORE)、MLOAD(Matrix LOAD)、MSTORE(Matrix STORE)的格式与VLOAD相同。
 
-![Vector Load (VLOAD) instruction](https://github.com/wwqqqqq/2018s-final-projects/raw/master/figures/4.png)
+![Vector Load (VLOAD) instruction](https://github.com/wwqqqqq/2018s-final-projects/raw/master/03-Cambricon/figures/4.png)
 <center>Figure 3. Vector Load (VLOAD) instruction.</center>
 
 由于使用了片上暂存器而不是向量寄存器，向量/矩阵大小是可变的，但使用时需注意`V_size`不能超出片上暂存器的容量，如果超出，编译器会将较长的向量/矩阵分成若干较短的块，并产生多条指令去处理它们。
@@ -80,7 +80,7 @@ Cambricon中的数据传送指令支持不同的数据大小以实现对于向�
 
 MLP由三层或更多层（具有一个或多个隐藏层的输入层和输出层）的非线性激活节点组成。由于MLP是全连接(fully-connected)的，因此一层中的每个节点都以一定权重$ w_{ij} $连接到下一层中的每个节点。图4中即为这样的一个层的前馈运行示意。
 
-![Typical operations in NNs](https://github.com/wwqqqqq/2018s-final-projects/raw/master/figures/5.png)
+![Typical operations in NNs](https://github.com/wwqqqqq/2018s-final-projects/raw/master/03-Cambricon/figures/5.png)
 <center>Figure 4. Typical operations in NNs.</center>
 
 输出神经元$ y_i $ (*i* = 1, 2, 3)可以由以下公式计算:
@@ -96,7 +96,7 @@ MLP由三层或更多层（具有一个或多个隐藏层的输入层和输出�
 其中，**y** = (y<sub>1</sub>, y<sub>2</sub>, y<sub>3</sub>)，**x** = (x<sub>1</sub>, x<sub>2</sub>, x<sub>3</sub>)，**b** = (b<sub>1</sub>, b<sub>2</sub>, b<sub>3</sub>)，分别为输出神经元的值的向量，输入神经元向量，和输入神经元对应的bias。W = (w<sub>ij</sub>)为权值矩阵，**f**为每个元素对应的激活函数*f*。
 
 公式(1)中的关键步骤是计算W**x**，在Cambricon中。这一步由`Maxtrix-Mult-Vector`(MMV)指令完成，该指令格式如图5所示。
-![Matrix Mult Vector (MMV) instruction](https://github.com/wwqqqqq/2018s-final-projects/raw/master/figures/6.png)
+![Matrix Mult Vector (MMV) instruction](https://github.com/wwqqqqq/2018s-final-projects/raw/master/03-Cambricon/figures/6.png)
 <center>Figure 5. Matrix Mult Vector (MMV) instruction.</center>
 
 `Reg0`存放输出向量的内存基地址(存储在片上暂存器中)`Vout_addr`；`Reg1`为输出向量的大小`Vout_size`；`Reg2`, `Reg3`, `Reg4`分别存有输入矩阵的基地址`Min_addr`，输入向量的基地址`Vin_addr`和输入向量的大小`Vin_size`，`Vin_size`在不同的指令中是可变的。
@@ -123,11 +123,12 @@ Sigmoid函数由以下公式定义：
 ![](http://latex.codecogs.com/gif.latex?S(x)=\\frac{1}{1+e^{-x}}=\\frac{e^x}{e^x+1})
 
 对输入向量**a**执行sigmoid激活函数可以分解为3个连续步骤，这三个步骤分别由3条指令支持：
-| 步骤 | Cambricon中对应的指令 |
-|----- | ------ |
-|对于**a**中的每个元素，计算![](http://latex.codecogs.com/gif.latex?e^{a_i})，i = 1, ..., n | `Vector-Exponential` (VEXP) |
-| 将向量![](http://latex.codecogs.com/gif.latex?(e^{a_i},...,e^{a_n}))中的每个元素加1 | `Vector-Add-Scalar`(VAS) |
-| 对于每个i, i = 1, ..., n，计算![](http://latex.codecogs.com/gif.latex?\\frac{e^{a_i}}{e^{a_i}+1})的值 | `Vector-Div-Vector`(VDV) |
+|#|步骤|Cambricon中对应的指令|
+|---|-----|------|
+|1|对于**a**中的每个元素，计算![](http://latex.codecogs.com/gif.latex?e^{a_i})，i = 1, ..., n|`Vector-Exponential` (VEXP)|
+|2|将向量![](http://latex.codecogs.com/gif.latex?(e^{a_i},...,e^{a_n}))中的每个元素加1|`Vector-Add-Scalar`(VAS)|
+|3|对于每个i, i = 1, ..., n，计算![](http://latex.codecogs.com/gif.latex?\\frac{e^{a_i}}{e^{a_i}+1})的值|`Vector-Div-Vector`(VDV)|
+
 
 不过尽管非常常用，sigmoid函数并不是现有NN技术使用的唯一的激发函数，为了支持多种不同的激发函数，Cambricon还提供了一系列的向量算术指令，如`Vector-Mult-Vector`(VMV), `Vector-Sub-Vector`(VSV), `Vector-Logarithm`(VLOG)。
 
@@ -139,21 +140,26 @@ Sigmoid函数由以下公式定义：
 
 很多最先进的NN技术都使用了一些结合了比较等逻辑操作的技术，如max-pooling操作(见图6.a)，它在一个pooling窗口中取其中具有最大输出的神经元，并且在不同的输入特征映射中，对所有对应的pooling窗口重复这一操作，见图6.b。
 
-![Max-pooling operation](https://github.com/wwqqqqq/2018s-final-projects/raw/master/figures/7.png)
+![Max-pooling operation](https://github.com/wwqqqqq/2018s-final-projects/raw/master/03-Cambricon/figures/7.png)
 <center>Figure 6. Max-pooling operation.</center>
 
 Cambricon中使用`Vector-Greater-Than-Merge`(VGTM)指令来帮助实现max-pooling操作。VGTM指令通过比较输入向量`Vin0`和`Vin1`中的对应元素，来指定输出向量(`V_out`)中的所有元素：
 ```C
 Vout[i] = (Vin0[i] > Vin1[i])? Vin0[i] : Vin1[i];
 ```
-![Vector Greater Than Merge (VGTM) instruction](https://github.com/wwqqqqq/2018s-final-projects/raw/master/figures/9.png)
+![Vector Greater Than Merge (VGTM) instruction](https://github.com/wwqqqqq/2018s-final-projects/raw/master/03-Cambricon/figures/9.png)
 <center>Figure 7. Vector Greater Than Merge (VGTM) instruction.</center>
 
-下面即为pooling操作的Cambricon汇编实现：
-![Pooling code](https://github.com/wwqqqqq/2018s-final-projects/raw/master/figures/8.png)
+下面即为对单个窗口的pooling操作的Cambricon汇编实现：
+![Pooling code](https://github.com/wwqqqqq/2018s-final-projects/raw/master/03-Cambricon/figures/8.png)
 
 除了向量计算指令外，Cambricon还提供了一些列向量比较指令(`Vector-Greater-than`(VGT), `Vector-Equal`(VE), `Vector AND/OR/NOT`(VAND/VOR/VNOT))，标量比较指令，及标量逻辑指令来计算分支条件。
 
+
+#### 标量指令
+尽管实验验证，GoogLeNet中只有0.008%的算术操作不能使用Cambricon中的矩阵和向量操作支持，NN中仍然有不可或缺的标量指令，如单个元素的算术操作和标量的超越函数。
+
+Cambricon中支持的标量操作如表1所示，此处不再赘述。
 
 
 
