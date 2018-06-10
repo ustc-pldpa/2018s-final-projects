@@ -56,7 +56,7 @@ Sequentially consistenty 是 C/C++11 atomic 提供的最强的访问一致性。
 
 如果一个 store 是 seq_cst，则其会进行 release。如果一个 load 是 seq_cst， 则其会进行 acquire。
 
-在此之外，所有的线程都能以同一顺序观测到所有的更改。
+在此之外，所有的 seq_cst 操作对发生前后关系构成一个全序集，所有线程下该关系都一致。
 
 ## 硬件内存模型
 
@@ -103,11 +103,6 @@ x86-TSO 是 Peer Sewell et al. 提出的面向程序员的 x86 多线程处理�
 | Store Relaxed:        | MOV (into memory)                                    |
 | Store Release:        | MOV (into memory)                                    |
 | Store Seq Cst:        | (LOCK) XCHG OR MOV (into memory),MFENCE |
-| Consume Fence:        | <ignore>                                             |
-| Acquire Fence:        | <ignore>                                             |
-| Release Fence:        | <ignore>                                             |
-| Acq_Rel Fence:        | <ignore>                                             |
-| Seq_Cst Fence:        | MFENCE                                               |
 
 ### 弱内存模型
 
@@ -128,7 +123,9 @@ x86-TSO 是 Peer Sewell et al. 提出的面向程序员的 x86 多线程处理�
 
 ### C/C++11 在弱内存模型下实现的问题
 
-Ori Lahav et al. (2017) 指出，C/C++11 的内存模型在 Power, ARMv7 这些弱内存模型上目前的实现是有问题的。首先是 C/C++ 要求的 SC (sequentially consistent) 过强，以至于在这些机器上的现有实现在混合 acquire 和 seq_cst 访问时，其性质会被破坏。如下面这个例子：
+Ori Lahav et al. (2017) 指出，C/C++11 的内存模型在 IBM Power, ARMv7 这些弱内存模型上目前的实现是有问题的。
+
+首先是 C/C++ 要求的 SC (sequentially consistency) 过强，以至于在这些机器上的现有实现在混合 acquire 和 seq_cst 访问时，其性质会被破坏。如下面这个例子(Manerkar et al., 2016)：
 
 | Thread 0                                  | Thread 1    | Thread 2    | Thread 3                                  |
 | ----------------------------------------- | ----------- | ----------- | ----------------------------------------- |
@@ -136,8 +133,17 @@ Ori Lahav et al. (2017) 指出，C/C++11 的内存模型在 Power, ARMv7 这些�
 
 这里用下标表示内存访问类型，注释为结果。$x,y,...$ 为内存，$a,b,...$ 为本地变量。所有变量初始值均为0。
 
-C/C++ 禁止这种结果的发生。而在 Power 架构下这种情况不能被阻止。
+C/C++ 禁止这种结果的发生。而在 Power 架构下这种情况是可能的。
 
 ### 解决方法
 
 Ori Lahav et al.(2017) 提出了一种解决该问题的方法 (S1fix)，即削弱对 SC 顺序的一致性要求，从原来的与 *sequenced-before* 和 *happens-before* 的闭包一致，减弱至和 $(sb \cup sb;hb;sb \cup hb|_{loc})$ 一致，即 SC 中两个事件不需要和仅由 *happens-before* 构成的闭包的顺序一致。
+
+### 参考文献
+
+[x86-TSO: A Rigorous and Usable Programmer’s Model for x86 Multiprocessors](https://www.cl.cam.ac.uk/~pes20/weakmemory/cacm.pdf)
+[std::memory_order - cppreference.com](https://en.cppreference.com/w/cpp/atomic/memory_order)
+C++ standard draft n4750
+[C/C++11 mappings to processors](http://www.cl.cam.ac.uk/~pes20/cpp/cpp0xmappings.html)
+[Repairing Sequential Consistency in C/C++11](https://plv.mpi-sws.org/scfix/paper.pdf)
+[A Tutorial Introduction to the ARM and POWER Relaxed Memory Models](https://www.cl.cam.ac.uk/~pes20/ppc-supplemental/test7.pdf)
