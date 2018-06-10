@@ -39,7 +39,7 @@ Cambricon是一种load-store型ISA，指令集中包含了标量、向量、矩�
 * 使用片上暂存存储器
     实验发现，NN技术通常需要对向量/矩阵数据进行密集、连续和可变长的访问，因此使用固定宽度、高能耗、价格高的向量寄存器不是最具性价比的选择。Cambricon使用片上暂存器代替了向量寄存器，对每个向量/矩阵数据提供了灵活的可访问宽度。同时，由于神经网络中的突触数据通常很大，且很少被重复使用，所以即使使用向量寄存器，带来的性能增益也不会太多，因此，使用片上暂存器也是考虑数据级并行的高效选择了。
 
-### 寒武纪指令集概览
+## 寒武纪指令集
 整体上看，Cambricon包含四种指令：计算指令、逻辑指令、控制指令、数据传送指令。尽管每种指令需要的指令长度不同，但这里采用RISC指令集的思想，同时处于内存对齐和设计难度的考虑，将指令长度固定在64位。下表为Cambricon指令集的指令类型、支持操作数概览：
 ![An overview to Cambricon instructions](https://github.com/wwqqqqq/2018s-final-projects/raw/master/03-Cambricon/figures/2.png)
 <center>Table 1. An overview to Cambricon instruction.</center>
@@ -47,13 +47,13 @@ Cambricon是一种load-store型ISA，指令集中包含了标量、向量、矩�
 Cambricon中的控制指令和数据传送指令很大程度上都类似MIPS指令集，但对于NN技术做出了一定的优化。
 
 
-#### 控制指令
+### 控制指令
 类似于MIPS，Cambricon中有两种控制指令：跳转和条件分支指令，指令格式如图2所示。跳转指令通过一个立即数或通用寄存器来指令地址偏移，使程序跳转到`PC + {offset}`指定的地址位置。条件分支指令除了使用立即数或通用寄存器来指定地址偏移量外，还使用一个通用寄存器来确定是否跳转，如下图中的`Reg0`，指令译码/执行时，通过比较`Reg0`的值和0来判断是否跳转，如果确定跳转(branch taken)，跳转到`PC + {offset}`指定的地址，否则跳转到`PC + 1`。
 
 ![Jump instruction and condition branch instruction](https://github.com/wwqqqqq/2018s-final-projects/raw/master/03-Cambricon/figures/3.png)
 <center>Figure 2. <I>top</I>:Jump instruction. <I>bottom</I>: Condtion Branch (CB) instruction.</center>
 
-#### 数据传送指令
+### 数据传送指令
 Cambricon中的数据传送指令支持不同的数据大小以实现对于向量/矩阵的计算/逻辑指令的灵活支持。这些指令可以load/store可变长的数据块——数据块的大小可以由数据传送指令中的数据宽度操作数指定(如图3中`V_size`部分)。数据传送操作可以发生在主存和片上暂存器之间，或片上暂存器和标量通用寄存器之间。
 
 图3中是VLOAD(Vector LOAD)指令的指令格式，VLOAD指令可以按`V_size`指令的数据块大小从主存到片上暂存器上传送数据，主存中数据的源地址为通用寄存器`Reg2`中所存数据和立即数`Immed`的和。其他数据传送指令，如VSTORE(Vector STORE)、MLOAD(Matrix LOAD)、MSTORE(Matrix STORE)的格式与VLOAD相同。
@@ -65,13 +65,8 @@ Cambricon中的数据传送指令支持不同的数据大小以实现对于向�
 
 向量和矩阵指令的片上暂存器容量在Cambricon中是固定的。在Cambricon中，对于向量指令，存储器容量为64KB，对于矩阵指令，存储器容量为768KB。然后，前面提过，Cambricon通过将内存分成多个体(banks)来提高访存并行度，Cambricon虽然固定了片上暂存器的容量，却没有限制暂存器中的bank数目，为微架构级的实现留下了很多的自由。
 
-#### 计算/逻辑指令
 
-在神经网络系统中，大多数算术运算(如加法、乘法、激活函数等)都可以聚合为矢量运算，根据对目前最为前沿的卷积神经网络GoogLeNet的量化研究，这个比例可以达到99.992%，此外，GoogLeNet中99.791%的向量运算(如点积运算)可以进一步聚合为矩阵运算(如向量-矩阵乘法)。所以，神经网络可以自然地分解为标量、向量和矩阵运算。此外，ISA设计时，必须有效地利用潜在的数据级并行性和数据的局部性。
-
-### 计算/逻辑指令详解
-
-#### 矩阵指令
+### 矩阵指令
 经过对现有NN技术的全面调研，Cambricon共设计了6条矩阵指令。
 
 下面，用一个很有代表性的神经网络MLP(多层感知器, Multi-Level Perceptrons)为例，详细解释这些矩阵指令是怎么做到对NN的支持的。
@@ -115,7 +110,7 @@ MMV指令支持任意比例的矩阵-向量乘法，只要所有的输入、输�
 
 故Cambricon中的6个矩阵计算指令有：MMV, VMM, OP, MMS, MAM, MSM.
 
-#### 向量指令
+### 向量指令
 仍然以公式(1)为例，可以看出上一节中的矩阵指令不足以定义该公式中的所有计算。例如，W**b**的结果和**b**都为向量，同时对W**x**+**b**的结果也需要做一个逐向量的映射**f**。对于向量加法W**x**+**b**，Cambricon中有直接支持的指令`Vector-Add-Vector`(VAV)，但对于逐向量的激活函数(element-wise activation)，还是需要多条指令才能完成。这里使用一个非常常用的激活函数sigmoid函数为例来加以说明。
 
 Sigmoid函数由以下公式定义：
@@ -123,11 +118,7 @@ Sigmoid函数由以下公式定义：
 ![](http://latex.codecogs.com/gif.latex?S(x)=\\frac{1}{1+e^{-x}}=\\frac{e^x}{e^x+1})
 
 对输入向量**a**执行sigmoid激活函数可以分解为3个连续步骤，这三个步骤分别由3条指令支持：
-|#|步骤|Cambricon中对应的指令|
-|---|-----|------|
-|1|对于**a**中的每个元素，计算![](http://latex.codecogs.com/gif.latex?e^{a_i})，i = 1, ..., n|`Vector-Exponential` (VEXP)|
-|2|将向量![](http://latex.codecogs.com/gif.latex?(e^{a_i},...,e^{a_n}))中的每个元素加1|`Vector-Add-Scalar`(VAS)|
-|3|对于每个i, i = 1, ..., n，计算![](http://latex.codecogs.com/gif.latex?\\frac{e^{a_i}}{e^{a_i}+1})的值|`Vector-Div-Vector`(VDV)|
+![procedure-instruction table](https://github.com/wwqqqqq/2018s-final-projects/raw/master/03-Cambricon/figures/10.png)
 
 
 不过尽管非常常用，sigmoid函数并不是现有NN技术使用的唯一的激发函数，为了支持多种不同的激发函数，Cambricon还提供了一系列的向量算术指令，如`Vector-Mult-Vector`(VMV), `Vector-Sub-Vector`(VSV), `Vector-Logarithm`(VLOG)。
@@ -136,7 +127,7 @@ Sigmoid函数由以下公式定义：
 
 此外，随机生成向量也是在很多NN技术(如dropout、random sampling)应用的重要操作，但在很多科学计算定义的传统线性代数库(如BLAS)中，都忽视了这个操作。Cambricon提供了一个指令`Random-Vector`(RV)来生成一个随机向量，向量元素的值的生成符合在区间[0, 1]上的均匀分布。有了可以实现均匀分布随机的向量，使用Ziggurat算法，结合其他的向量算术指令和向量比较指令，可以在此基础上实现其他的分布，如高斯分布等。[10]
 
-#### 逻辑指令
+### 逻辑指令
 
 很多最先进的NN技术都使用了一些结合了比较等逻辑操作的技术，如max-pooling操作(见图6.a)，它在一个pooling窗口中取其中具有最大输出的神经元，并且在不同的输入特征映射中，对所有对应的pooling窗口重复这一操作，见图6.b。
 
@@ -156,10 +147,30 @@ Vout[i] = (Vin0[i] > Vin1[i])? Vin0[i] : Vin1[i];
 除了向量计算指令外，Cambricon还提供了一些列向量比较指令(`Vector-Greater-than`(VGT), `Vector-Equal`(VE), `Vector AND/OR/NOT`(VAND/VOR/VNOT))，标量比较指令，及标量逻辑指令来计算分支条件。
 
 
-#### 标量指令
-尽管实验验证，GoogLeNet中只有0.008%的算术操作不能使用Cambricon中的矩阵和向量操作支持，NN中仍然有不可或缺的标量指令，如单个元素的算术操作和标量的超越函数。
+### 标量指令
+在神经网络系统中，大多数算术运算(如加法、乘法、激活函数等)都可以聚合为矢量运算，根据对目前最为前沿的卷积神经网络GoogLeNet的量化研究，这个比例可以达到99.992%，此外，GoogLeNet中99.791%的向量运算(如点积运算)可以进一步聚合为矩阵运算(如向量-矩阵乘法)。
 
-Cambricon中支持的标量操作如表1所示，此处不再赘述。
+尽管GoogLeNet中只有0.008%的算术操作不能使用Cambricon中的矩阵和向量操作支持，NN技术所需的操作中仍然有不可或缺的标量指令，如单个元素的算术操作和标量的超越函数。Cambricon中支持的标量操作如表1所示，此处不再赘述。
+
+## 原型机
+![A prototype accelerator based on Cambricon](https://github.com/wwqqqqq/2018s-final-projects/raw/master/03-Cambricon/figures/11.png)
+<center>Figure 8. A prototype accelerator based on Cambricon.</center>
+
+在指令级并行的层面上，Cambricon的原型加速器确定了以下的流水段：    
+取址、译码、发射、读寄存器、执行、写回、提交。
+
+如上图所示，在取址、译码阶段后，指令进入一个有序发射队列。在从标量寄存器中成功地取得指令的操作数，包括标量数据或矩阵/向量的地址/大小，指令会根据它的类型被传送到不同的执行部件开始指令。控制指令和标量计算/逻辑指令由标量部件直接处理。写回阶段后，已执行未提交的最早的指令的结果，被从重排缓冲区(reorder buffer)中提交。
+
+数据传送指令，向量/矩阵计算指令和向量逻辑指令可能会访问L1 cache和暂存存储器，所以这些指令会被传送到地址计算部件(Address Generation Unit, AGU)，加入一个顺序的内存队列，等待AGU计算这些类型的指令与该内存队列中在它们之前的指令是否有数据依赖。在此之后，标量数据传送指令的访存请求会被发送到L1 cache，向量的数据传送/计算/逻辑指令会被发送到向量功能部件，矩阵的数据传送/计算指令被发送到矩阵功能部件。在执行段结束后，指令会从内存队列中出队，当它是当前已执行未提交的最早的指令时，将结果从重拍缓存区中提交。
+
+加速器中实现了向量和矩阵功能部件。向量部件中由32个16位加法器，32给16位乘法器，64KB暂存存储器。矩阵部件包括1024给乘法器和1024给加法器，为了避免长距离数据传送的能耗和线路拥塞，这些乘法器和加法器被分成32给计算块，每个计算块都有一个独立的24KB暂存器。这32给计算块以h-tree结构连接，一个h-tree总线来进行输入数据的广播和输出数据的收集。
+
+上面已经提到，出于很多原因，Cambricon中使用片上暂存器来取代大多数SIMD机器中的向量寄存器。为了提高对暂存器的方寸效率，原型机中的向量/矩阵功能部件使用了3个DMA部件，分别对应每条指令的输入/输出向量/矩阵。此外，暂存存储器还有一个IO DMA。
+
+不过每个暂存存储器只对每个内存bank提供一个接口，但访存时最多需要处理4个并行读写请求。为了解决这个问题，把内存根据地址低2位分成4给bank，将这4个bank的4个读写端口使用一个crossbar连接起来，使用这个crossbar来保证不会有两个bank被同时访问，如下图所示。
+
+![Structure of matrix scratchpad memory](https://github.com/wwqqqqq/2018s-final-projects/raw/master/03-Cambricon/figures/12.png)
+<center>Figure 9. Structure of matrix scratchpad memory.</center>
 
 
 
