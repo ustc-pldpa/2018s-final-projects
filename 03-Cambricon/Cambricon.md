@@ -1,5 +1,7 @@
 # Cambricon: An Instruction Set Architecture for Neural Networks
 
+[TOC]
+
 ## 设计背景
 
 神经网络(Neural Networks, NN)是广泛运用于机器学习和模式识别的一系列模型的集合。NN被应用于很大范围的不同应用，如模式识别、web搜索等中，已被例证为目前最为先进的深度学习技术，在某些特别的应用中，甚至达到了人类的识别水准。
@@ -16,14 +18,13 @@
 1. 可以将复杂的描述高层NN模型和功能块的指令简化为底层的计算操作——如点积——的组合。这样以来，加速器就可以拥有更大范围的应用域，而不是局限于某几种特定模型，因为大部分新的NN技术的功能块，都可以使用这些底层的运算操作指令描述出来。
 2. 功能简单、长度较短的指令可以有效地减少指令译码器设计和验证的复杂度，以及硬件开销/能耗。
 
-Cambricon是一种load-store型ISA，指令集中包含了标量、向量、矩阵、逻辑计算，数据迁移和控制指令，是基于对现有NN技术的综合分析设计而成。Cambricon ISA中所有的指令都为64位，有64个32位通用寄存器(General-Purpose Registers, GPRs)，这些通用寄存器主要用于控制和计算地址。为了支持对向量/矩阵数据的运算，综合效率和能耗的考虑，寒武纪体系结构中并没有使用向量寄存器，而是使用了程序员/编译器不可见的片上高速暂存存储器(on-chip scratchpad memory)。片上存储器不需要像寄存器文件一样实现多个端口，而是可以将内存组织为多个独立的banks，根据块号(内存地址的低位)来进行多体交叉编址，在访存向量/矩阵数据时进行并行访问，以提高访存效率[1]。如果采用一般SIMD体系结构的做法，使用向量寄存器来进行向量的存储，整体的计算效率就会受制于寄存器的长度，而片上缓存中的bank宽度很容易就可以做到比寄存器宽度大，因此Cambricon可以支持较大的向量/长度不定的向量。
+Cambricon是一种load-store型ISA，指令集中包含了标量、向量、矩阵、逻辑计算，数据迁移和控制指令，是基于对现有NN技术的综合分析设计而成。Cambricon ISA中所有的指令都为64位，有64个32位通用寄存器(General-Purpose Registers, GPRs)，这些通用寄存器主要用于控制和计算地址。为了支持对向量/矩阵数据的运算，综合效率和能耗的考虑，寒武纪体系结构中并没有使用向量寄存器，而是使用了程序员/编译器可见的片上高速暂存存储器(on-chip scratchpad memory)。片上存储器不需要像寄存器文件一样实现多个端口，而是可以将内存组织为多个独立的banks，根据块号(内存地址的低位)来进行多体交叉编址，在访存向量/矩阵数据时进行并行访问，以提高访存效率[1]。如果采用一般SIMD体系结构的做法，使用向量寄存器来进行向量的存储，整体的计算效率就会受制于寄存器的长度，而片上缓存中的bank宽度很容易就可以做到比寄存器宽度大，因此Cambricon可以支持较大的向量/长度不定的向量。
 ![Four-way interleaved memory banks using block addressing](https://github.com/wwqqqqq/2018s-final-projects/raw/master/figures/1.png)
 <center>figure 1. Four-way interleaved memory banks using block addressing</center>
 
 
 
-
-实验显示，寒武纪对于大部分NN技术都具有很强的描述能力，相比于通用ISA如x86、MIPS、GPGPU等，具有更高的代码密度。在十种具有代表性的不同的NN技术(MLP, CNN, RNN, LSTM, Autoencoder, Sparse Autoencoder, BM, RBM, SOM, HNN)的benchmark测试中，Cambricon的代码密度为MIPS的13.38倍，x86的9.86倍，GPGPU的6.41倍。此外，相比于在此之前的最新NN加速器DaDianNao (只能很好地支持3中NN技术)，基于寒武纪的加速器只产生了可忽略不计的延迟/功率/面积开销，分别为4.5%，4.4%和1.6%。(???)
+实验显示，寒武纪对于大部分NN技术都具有很强的描述能力，相比于通用ISA如x86、MIPS、GPGPU等，具有更高的代码密度。在十种具有代表性的不同的NN技术(MLP, CNN, RNN, LSTM, Autoencoder, Sparse Autoencoder, BM, RBM, SOM, HNN)的benchmark测试中，Cambricon的代码密度为MIPS的13.38倍，x86的9.86倍，GPGPU的6.41倍。此外，相比于在此之前的最新NN加速器DaDianNao (只能很好地支持3中NN技术)，基于寒武纪的加速器只产生了可忽略不计的延迟/功率/面积开销，分别为4.5%，4.4%和1.6%。
 
 ### 设计准则
 设计目标是实现一个简洁、灵活、高效，且适用于NN的ISA，通过分析不同NN技术的计算操作和内存访问模式，确定了如下的几个设计准则：
@@ -45,6 +46,7 @@ Cambricon是一种load-store型ISA，指令集中包含了标量、向量、矩�
 
 Cambricon中的控制指令和数据传送指令很大程度上都类似MIPS指令集，但对于NN技术做出了一定的优化。
 
+
 #### 控制指令
 类似于MIPS，Cambricon中有两种控制指令：跳转和条件分支指令，指令格式如图2所示。跳转指令通过一个立即数或通用寄存器来指令地址偏移，使程序跳转到`PC + {offset}`指定的地址位置。条件分支指令除了使用立即数或通用寄存器来指定地址偏移量外，还使用一个通用寄存器来确定是否跳转，如下图中的`Reg0`，指令译码/执行时，通过比较`Reg0`的值和0来判断是否跳转，如果确定跳转(branch taken)，跳转到`PC + {offset}`指定的地址，否则跳转到`PC + 1`。
 
@@ -57,8 +59,53 @@ Cambricon中的数据传送指令支持不同的数据大小以实现对于向�
 图3中是VLOAD(Vector LOAD)指令的指令格式，VLOAD指令可以按`V_size`指令的数据块大小从主存到片上暂存器上传送数据，主存中数据的源地址为通用寄存器`Reg2`中所存数据和立即数`Immed`的和。其他数据传送指令，如VSTORE(Vector STORE)、MLOAD(Matrix LOAD)、MSTORE(Matrix STORE)的格式与VLOAD相同。
 
 ![Vector Load (VLOAD) instruction](https://github.com/wwqqqqq/2018s-final-projects/raw/master/figures/4.png)
-<h1 style="text-align:center">Figure 3. Vector Load (VLOAD) instruction.</h1>
+<center>Figure 3. Vector Load (VLOAD) instruction.</center>
+
+由于使用了片上暂存器而不是向量寄存器，向量/矩阵大小是可变的，但使用时需注意`V_size`不能超出片上暂存器的容量，如果超出，编译器会将较长的向量/矩阵分成若干较短的块，并产生多条指令去处理它们。
+
+向量和矩阵指令的片上暂存器容量在Cambricon中是固定的。在Cambricon中，对于向量指令，存储器容量为64KB，对于矩阵指令，存储器容量为768KB。然后，前面提过，Cambricon通过将内存分成多个体(banks)来提高访存并行度，Cambricon虽然固定了片上暂存器的容量，却没有限制暂存器中的bank数目，为微架构级的实现留下了很多的自由。
+
+#### 计算/逻辑指令
+
+在神经网络系统中，大多数算术运算(如加法、乘法、激活函数等)都可以聚合为矢量运算，根据对目前最为前沿的卷积神经网络GoogLeNet的量化研究，这个比例可以达到99.992%，此外，GoogLeNet中99.791%的向量运算(如点积运算)可以进一步聚合为矩阵运算(如向量-矩阵乘法)。所以，神经网络可以自然地分解为标量、向量和矩阵运算。此外，ISA设计时，必须有效地利用潜在的数据级并行性和数据的局部性。
+
+### 计算/逻辑指令详解
+
+#### 矩阵指令
+经过对现有NN技术的全面调研，Cambricon共设计了6条矩阵指令。
+
+下面，用一个很有代表性的神经网络MLP(多层感知器, Multi-Level Perceptrons)为例，详细解释这些矩阵指令是怎么做到对NN的支持的。
+
+多层感知器（MLP）是一类前馈人工神经网络。一个MLP至少由三层节点组成，每一层都根据值已知的输入神经元，来计算输出神经元的值。除输入节点外，每个节点都是使用非线性激活函数的神经元。 MLP利用称为反向传播的监督学习技术进行训练。[2] [3]其多层和非线性激活将MLP与线性感知器区分开来。它可以区分不能线性分离的数据。[4]
+
+MLP由三层或更多层（具有一个或多个隐藏层的输入层和输出层）的非线性激活节点组成。由于MLP是全连接(fully-connected)的，因此一层中的每个节点都以一定权重$ w_{ij} $连接到下一层中的每个节点。图4中即为这样的一个层的前馈运行示意。
+
+![Typical operations in NNs](https://github.com/wwqqqqq/2018s-final-projects/raw/master/figures/5.png)
+<center>Figure 4. Typical operations in NNs.</center>
+
+输出神经元$ y_i $ (*i* = 1, 2, 3)可以由以下公式计算:
+$$ y_i = f(\sum_{j=1}^3 w_{ij}x_j + b_i) $$
+这里的$ x_j $为第$j$个输入神经元，$ w_{ij} $为第$i$个输出神经元和第$j$个输入神经元之间的权重，$ b_i $为第$i$给输出神经元对应的偏置(bias)，$f$为激活函数。
+
+输出神经元的计算还可以转化为向量运算：
+$$
+\vec{y} = \vec{f}(W\vec{x} + \vec{b}) \tag {1}
+$$
+其中，$\vec{y} = (y_1, y_2, y_3)$，$\vec{x} = (x_1, x_2, x_3)$，$\vec{b} = (b_1, b_2, b_3)$，分别为输出神经元的值的向量，输入神经元向量，和输入神经元对应的bias。$W = (w_{ij})$为权值矩阵，$\vec{f}$为每个元素对应的激活函数$f$。
+
+公式$(1)$中的关键步骤是计算$W\vec{x}$，在Cambricon中。这一步由`Maxtrix-Mult-Vector`(MMV)指令完成，该指令格式如图5所示。
+![Matrix Mult Vector (MMV) instruction](https://github.com/wwqqqqq/2018s-final-projects/raw/master/figures/5.png)
+<center>Figure 5. Matrix Mult Vector (MMV) instruction.</center>
 
 
-# 参考文献
-[1] Computer Architechture: A Quantitative Approach, Fifth Edition. Hennessy, J.L., Patterson, D.A. 
+
+
+
+## 参考文献
+[1] Hennessy, J.L., Patterson, D.A. Computer Architechture: A Quantitative Approach, Fifth Edition. 
+
+[2] Rosenblatt, Frank. x. Principles of Neurodynamics: Perceptrons and the Theory of Brain Mechanisms. Spartan Books, Washington DC, 1961
+
+[3] Rumelhart, David E., Geoffrey E. Hinton, and R. J. Williams. "Learning Internal Representations by Error Propagation". David E. Rumelhart, James L. McClelland, and the PDP research group. (editors), Parallel distributed processing: Explorations in the microstructure of cognition, Volume 1: Foundation. MIT Press, 1986.
+
+[4]Cybenko, G. 1989. Approximation by superpositions of a sigmoidal function Mathematics of Control, Signals, and Systems, 2(4), 303–314.
