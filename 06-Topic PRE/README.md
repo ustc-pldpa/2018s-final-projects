@@ -14,7 +14,7 @@ In this project, I did some research on optimal PRE algorithms in various forms:
 
 ## Content
 
-* []() is the slides 
+* [Slides](https://github.com/Jeffery-Song/2018s-final-projects/blob/master/06-Topic%20PRE/An%20SSA-based%20Algorithm%20for%20Optimal%20Speculative%20Code%20Motion.pptx) is the slides 
 
 ## Reference
 
