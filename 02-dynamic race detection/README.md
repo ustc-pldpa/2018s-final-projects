@@ -25,3 +25,7 @@ exactly those executions explored by their instrumentation.
 
 Their work can be extended to detect race in GPU based computation model
 
+## Reference
+
+1. [Dynamic Race Detection for C++11](http://www.doc.ic.ac.uk/~afd/homepages/papers/pdfs/2017/POPL.pdf)
+2. [C++ Memory Model](https://en.cppreference.com/w/cpp/language/memory_model)

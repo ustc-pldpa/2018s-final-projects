@@ -153,6 +153,4 @@ They also runs it on large applications, i.e. Chrome and Firefox.
 
 The paper has presented a method for accurate dynamic race analysis for C++11 programs, and an instrumentation library that allows a large fragment of the C++11 relaxed memory model to be explored. Our experiments show that our implementation, an extension to tsan, can detect races that are beyond the scope of the original tool, and that our extended instrumentation still enables analysis of large applications—the Firefox and Chromium web browsers 
 
-## Reference
 
-1. [Dynamic Race Detection for C++11](http://www.doc.ic.ac.uk/~afd/homepages/papers/pdfs/2017/POPL.pdf)
