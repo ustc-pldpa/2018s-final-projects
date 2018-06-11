@@ -562,30 +562,15 @@ function sqrt {
 
 ## 参考文献
 
-* [xWIDL: modular and deep JavaScript API misuses checking based on extended WebIDL](https://dl.acm.org/citation.cfm?id=2998545)
 
-* OOPSLA13 [Inductive Invariant Generation](https://www.cs.utexas.edu/~isil/oopsla13.pdf)
-  
-* MSR: [Using SMT solvers for program analysis](http://www.it.uu.se/research/group/astra/CPmeetsCAV/slides/qadeer.pdf)
-
-* Research Seminar: [Formal Methods for Program 
-Analysis and Generation](https://pdfs.semanticscholar.org/presentation/b204/4fa109e5ba19aa6b65db55a9a8e75d88ec63.pdf)
-
-* NASA: [Verification of Java Programs Using Symbolic](https://ntrs.nasa.gov/archive/nasa/casi.ntrs.nasa.gov/20040068136.pdf)
-
-* PLDI'02 [Extended Static Checking for Java](https://web.stanford.edu/class/archive/cs/cs295/cs295.1086/papers/p234-leino.pdf)
-
-* [Differential and cross-version
-program verification](https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02//symdiff-symdiff-halmstad-june2015.pdf)
-
-* [Design by Contract for Python](http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.39.6753&rep=rep1&type=pdf)
-
-* [Random testing in Isabelle/HOL](https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=1347524)
-
-* [On the Relative Completeness of Bytecode
-Analysis versus Source Code Analysis](https://www.microsoft.com/en-us/research/wp-content/uploads/2008/01/cc08.pdf)
-
-* [The Octahedron Abstract Domain](http://www.cs.upc.edu/~jordicf/Research/gavina/BIB/files/octahedron_scp07.pdf)
-
-* [Refining Abstract Interpretation-based Static
-Analyses with Hints](https://www.microsoft.com/en-us/research/wp-content/uploads/2009/12/Hints.pdf)
+1. Zhang, Zhen. "xWIDL: modular and deep JavaScript API misuses checking based on extended WebIDL." Companion Proceedings of the 2016 ACM SIGPLAN International Conference on Systems, Programming, Languages and Applications: Software for Humanity. ACM, 2016.
+1. Jensen, Simon Holm, Anders Møller, and Peter Thiemann. "Type analysis for JavaScript." International Static Analysis Symposium. Springer, Berlin, Heidelberg, 2009.
+1. Kashyap, Vineeth, et al. "Type refinement for static analysis of JavaScript." ACM SIGPLAN Notices. Vol. 49. No. 2. ACM, 2013.
+1. Jensen, Simon Holm, Anders Møller, and Peter Thiemann. "Interprocedural analysis with lazy propagation." International Static Analysis Symposium. Springer, Berlin, Heidelberg, 2010.
+1. Andreasen, Esben, et al. "Improving Tools for JavaScript Programmers." Proc. of International Workshop on Scripts to Programs. Beijing, China:[sn]. 2012.
+2. Laviron, Vincent, and Francesco Logozzo. "Refining abstract interpretation-based static analyses with hints." Asian Symposium on Programming Languages and Systems. Springer, Berlin, Heidelberg, 2009.
+1. Lehmann, Nico, and Éric Tanter. "Gradual refinement types." ACM SIGPLAN Notices 52.1 (2017): 775-788.
+1. Fähndrich, Manuel, and Francesco Logozzo. "Static contract checking with abstract interpretation." International Conference on Formal Verification of Object-Oriented Software. Springer, Berlin, Heidelberg, 2010.
+1. Ferrara, Pietro, Francesco Logozzo, and Manuel Fähndrich. "Safer unsafe code for. net." ACM Sigplan Notices 43.10 (2008): 329-346.
+1. Cousot, Patrick M., et al. "An abstract interpretation framework for refactoring with application to extract methods with contracts." ACM SIGPLAN Notices. Vol. 47. No. 10. ACM, 2012.
+1. Logozzo, Francesco. "Technology for inferring contracts from code." ACM SIGAda Ada Letters. Vol. 33. No. 3. ACM, 2013.
