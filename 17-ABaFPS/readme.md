@@ -26,3 +26,8 @@ No.17 董仕 PB15111607
 * 类似ML的数据流驱动的形式化模型
 * 分支提前算法
 * 分析其适用范围和不足
+
+## Reference
+
+ML for the working programmer, Paulson, L. C., 7-111-16121-1
+[Array programming](https://www.wikiwand.com/en/Array_programming)
