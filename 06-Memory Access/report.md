@@ -121,7 +121,7 @@ x86-TSO 是 Peer Sewell et al. 提出的面向程序员的 x86 多线程处理�
 | Store Release:        | lwsync; st                 |
 | Store Seq Cst:        | hwsync; st                 |
 
-### C/C++11 在弱内存模型下实现的问题
+## C/C++11 在弱内存模型下实现的问题
 
 Ori Lahav et al. (2017) 指出，C/C++11 的内存模型在 IBM Power, ARMv7 这些弱内存模型上目前的实现是有问题的。
 
@@ -134,6 +134,13 @@ Ori Lahav et al. (2017) 指出，C/C++11 的内存模型在 IBM Power, ARMv7 这
 这里用下标表示内存访问类型，注释为结果。$x,y,...$ 为内存，$a,b,...$ 为本地变量。所有变量初始值均为0。
 
 C/C++ 禁止这种结果的发生。而在 Power 架构下这种情况是可能的。
+
+### C/C++ 禁止的判断
+
+* *happens-before* 顺序：在不考虑 consume 的情况下（事实上当前草稿不建议使用 consume ）， *happens-before* 的定义等同于 *strongly happens-before*，说求值 A *strongly happens before* 求值B，应满足以下任意一个条件：
+    1. A *sequenced before* B，即在一个线程内， A 的求值顺序先于 B。
+    2. B *synchronizes-with* A，即 B 是 load-acquire，且读取的结果为 A 写的结果，或 A 为首的 release sequence 中写的结果。
+    3. A *strongly happens before* X，且 X *strongly happens before* B
 
 ### 解决方法
 
