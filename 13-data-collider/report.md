@@ -65,7 +65,7 @@ DetectConflicts( loc, size, isWrite) {
 	if( temp != temp’ || data breakpoint fired )
 	ReportDataRace( );
 }
-```cpp
+```
 
 ### 采样算法
 
