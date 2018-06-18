@@ -34,7 +34,7 @@ DataCollider利用当前计算机硬件系统结构中的代码断点和数据�
 
 首先，对内存访问指令进行采样，在选中的位置设置代码断点，当执行到断点时，DataCollider会暂停当前正在执行的线程，产生延迟，然后检测其它线程是否有冲突的访问。DataCollider使用两种冲突检测策略：数据断点和重复读取。基本算法如下：
 
-···cpp
+```cpp
 AtPeriodicIntervals() {
 	// determine k based on desired
 	// memory access sampling rate
@@ -65,7 +65,7 @@ DetectConflicts( loc, size, isWrite) {
 	if( temp != temp’ || data breakpoint fired )
 	ReportDataRace( );
 }
-···cpp
+```cpp
 
 ### 采样算法
 
