@@ -4,7 +4,7 @@ Student teamworks summary repository for [USTC FOPL class](http://staff.ustc.edu
 ## Important Dates 
 
 - **Jun 10**: submit your final project materials, and prepare a 10-minute presentation of the project
-- **Classes on Jun 11, 13, 18, 20**: each team should present their project in the class, and all teams and teachers will ask questions about the presentation. 
+- **Classes on Jun ~~11,~~ 13, 18, 20**: each team should present their project in the class, and all teams and teachers will ask questions about the presentation. 
 - **Jun 24**: Final submission
 
 ## Contributing
