@@ -58,6 +58,10 @@ Sequentially consistenty 是 C/C++11 atomic 提供的最强的访问一致性。
 
 在此之外，所有的 seq_cst 操作对发生前后关系构成一个全序集，所有线程下该关系都一致。
 
+### 4. consume
+
+consume 和 acquire 相近，下面的内存模型不提及 consume ，因此在这里不具体描述而导致问题复杂化。
+
 ## 硬件内存模型
 
 ### 强内存模型和弱内存模型
@@ -115,11 +119,11 @@ x86-TSO 是 Peer Sewell et al. 提出的面向程序员的 x86 多线程处理�
 | **C/C++11 Operation** | **Power implementation**   |
 | --------------------- | -------------------------- |
 | Load Relaxed:         | ld                         |
-| Load Acquire:         | ld; cmp; bc; isync         |
-| Load Seq Cst:         | hwsync; ld; cmp; bc; isync |
+| Load Acquire:         | ld;                        |
+| Load Seq Cst:         | ld; hwsync                 |
 | Store Relaxed:        | st                         |
 | Store Release:        | lwsync; st                 |
-| Store Seq Cst:        | hwsync; st                 |
+| Store Seq Cst:        | lwsync; st; hwsync         |
 
 ## C/C++11 在弱内存模型下实现的问题
 
@@ -131,20 +135,53 @@ Ori Lahav et al. (2017) 指出，C/C++11 的内存模型在 IBM Power, ARMv7 这
 | ----------------------------------------- | ----------- | ----------- | ----------------------------------------- |
 | $a := x_{acq}$ // 1<br />$c:=y_{sc}$ // 0 | $x:=_{sc}1$ | $y:=_{sc}1$ | $b:=y_{acq}$  // 1<br /> $d:=x_{sc}$ // 0 |
 
-这里用下标表示内存访问类型，注释为结果。$x,y,...$ 为内存，$a,b,...$ 为本地变量。所有变量初始值均为0。
+这里用下标表示内存访问类型，注释为读操作的结果。$x,y,...$ 为内存，$a,b,...$ 为本地变量。所有变量初始值均为0。
 
 C/C++ 禁止这种结果的发生。而在 Power 架构下这种情况是可能的。
 
 ### C/C++ 禁止的判断
+
+C/C++11 中有如下规则：
 
 * *happens-before* 顺序：在不考虑 consume 的情况下（事实上当前草稿不建议使用 consume ）， *happens-before* 的定义等同于 *strongly happens-before*，说求值 A *strongly happens before* 求值B，应满足以下任意一个条件：
     1. A *sequenced before* B，即在一个线程内， A 的求值顺序先于 B。
     2. B *synchronizes-with* A，即 B 是 load-acquire，且读取的结果为 A 写的结果，或 A 为首的 release sequence 中写的结果。
     3. A *strongly happens before* X，且 X *strongly happens before* B
 
+* 所有标记为 SC 的事件应存在一个唯一的全序（唯一指各线程上都有该全序），该全序与 happens-before 以及每一个内存地址上的 SC 写的顺序无矛盾。
+
+* 标记为 SC 的读会读取：
+
+1. 如果该读之前（在上述 SC 全序的关系下）有对同一内存地址的 SC 写，那么会读下列两者之一：
+    * SC 的全序之中，在该读之前距其最近的 SC 写
+    * 一个非 SC 的写，这个写不在对该地址的 SC 写之前发生(happen before)
+2. 如果没有，则为某非 SC 的写操作的结果
+
+使用上述的规则，可以发现：
+
+1. happens before 关系：$x :=_{sc}1$ -> $a := x_{acq}$ -> $c := y_{sc}$, $y :=_{sc} 1$ -> $b:=y_{acq}$ -> $d:=x_{sc}$
+2. 各个内存位置的读写顺序： $c:=y_{sc}$ -> $y:=_{sc}1$ -> $b:=y_{acq}$, $d:=x_{sc}$ -> $x:=_{sc}1$ -> $a := x_{acq}$
+3. 由 1.2. 得到的 SC 全序产生了一个环，因此是不允许的
+
+### Power 架构下的实现
+
+这里考虑 trailing sync ，即 SC 操作翻译到弱内存模型的指令时， sync(Power内即hwsync) 指令在最后。
+
+可以发现 Thread 0 中 a 和 c 之间只有一个 lwsync，该 sync 过弱而使得可能 Thread 0 上看到 x=1, y=0 而同时 Thread 1 看到 x=0, y=1 ，导致矛盾。
+
+如果使用 leading sync ，则 Thread 0 在读取 x=1 之后，会使用 hwsync 使得 x=1 对所有线程可见，因此这个程序不会出问题。但能构造程序， 使得 leading sync 发生类似的问题。
+
+### 问题原因
+
+具体原因为 release/acquire 使用的 lwsync 过弱，导致不能保证前后操作的顺序性。
+
 ### 解决方法
 
-Ori Lahav et al.(2017) 提出了一种解决该问题的方法 (S1fix)，即削弱对 SC 顺序的一致性要求，从原来的与 *sequenced-before* 和 *happens-before* 的闭包一致，减弱至和 $(sb \cup sb;hb;sb \cup hb|_{loc})$ 一致，即 SC 中两个事件不需要和仅由 *happens-before* 构成的闭包的顺序一致。
+如果将 release/acquire 的 lwsync 全部换成 hwsync ，则可以解决该问题，然而 hwsync 需要同步所有线程，导致代价十分高昂，release/acquire 也也失去其意义。
+
+Ori Lahav et al.(2017) 提出了一种解决该问题的方法 (S1fix)，即削弱对 SC 顺序的一致性要求，从原来的与 *sequenced-before* 和 *happens-before* 的闭包一致，减弱至和 $(sb \cup sb;hb;sb \cup hb|_{loc})$ (sb 即 sequence before， hb 为一个内存地址上读写的 happen before) 一致，即 SC 中两个事件不需要和仅由 *happens-before* 构成的闭包的顺序一致。
+
+第二种解决方案下，修改后的 C/C++ 标准（论文中称为 RC/C++11）允许 ARM/IBM Power 的这种行为。
 
 ### 参考文献
 

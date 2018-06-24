@@ -24,6 +24,7 @@ JavaScript is an error-prone scripting language with which so many platform APIs
 |presentation.pdf | presentation|
 |report.pdf Report.md | report of the project(not finished yet)|
 |Readme.md | description of the project|
+|Future.md | ideas of the future work|
 
 ## Progress
 
