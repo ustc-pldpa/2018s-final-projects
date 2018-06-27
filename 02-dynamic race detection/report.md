@@ -4,7 +4,7 @@
 
 The definition of a data race in C++11 is far from trivial, due to the complex rules for when synchronisation occurs between the various atomic operations provided by the language, and memory order with which atomic operations are annotated.
 
-The current state-of-art in dynamic race detection is ThreadSanitizer(tsan).Although the tool can be applied to programs that use C++11 concurrency, the tool does not under stand the specifics of the C++11 memory model. The paper tries to modify the asan tool to be fully aware of the memory model.
+The current state-of-art in dynamic race detection is ThreadSanitizer(tsan).Although the tool can be applied to programs that use C++11 concurrency, the tool does not understand the specifics of the C++11 memory model. The paper tries to modify the asan tool to be fully aware of the memory model.
 
 ## Background
 
@@ -12,16 +12,16 @@ Before we talk about details in the paper, let's have an overview of C++11 concu
 
 ### C/C++11 Memory Model
 
-The C/C++11 standards provide several low level atomic operations on atomic types, which allow multiple threads to interact:  stores, loads, read-modify-writes(RMWs) and fences. RMWs will modify the existing value of an atomic location, storing the new value and returning the previous value atomically. Fences decouple the memory ordering constraints mentioned bellow from atomic location, allowing for finer control over synchronization. A *load* is an atomic load or RMW.An *acquire load* is a load with acquire, acquire-release or sequentially consistent ordering. A *store* is an atomic store or RMW. A *release store*is a store with release, acquire-release or sequentially consistent ordering.
+The C/C++11 standards provide several low level atomic operations on atomic types, and memory orderings attached to them. Memory orderings specify how regular, non-atomic memory accesses are to be ordered around an atomic operation. There are four atomic operations:  stores, loads, read-modify-writes(**RMW**s) and fences, and six memory orderings: relaxed, release, acquire consume, release-acquire, sequentially-consistent. The RMWs will modify the existing value of an atomic location, storing the new value and returning the previous value atomically. Fences decouple the memory ordering constraints mentioned bellow from atomic location, allowing for finer control over synchronization. A *load* is an atomic load or RMW.An *acquire load* is a load with acquire, acquire-release or sequentially consistent ordering. A *store* is an atomic store or RMW. A *release store* is a store with release, acquire-release or sequentially consistent ordering.
 
 The model is defined using a set of relations and predicates. Here is an overview.
 
 We use **W**, **R**, **RMW** and **F** to represent read, write, RMW and fence. Memory orderings are
-shortened to **rlx**, **rel**, **acq**, **ra**, **sc** and **na** for relaxed, release, acquire, release-acquire sequentially-consistent and non-atomic, respectively. For example, $\text{a:W}_{\text{rel}}\text{x=1}$ is a memory event that corresponds to a relaxed write of 1 to memory location **x**; **a** is a unique identifier for the event. and, $\text{b:RMW}_{\text{ra}}x=1/2$ shows event b reading value 1 from and writing value 2 to **x** and writing value 2 to **x** atomically. Fences have no associated values and atomic locations.
+shortened to **rlx**, **rel**, **acq**, **ra**, **sc** and **na** for relaxed, release, acquire, release-acquire, sequentially-consistent and non-atomic, respectively. For example, $\text{a:W}_{\text{rel}}\text{x=1}$ is a memory event that corresponds to a relaxed write of 1 to memory location **x**; **a** is a unique identifier for the event. and, $\text{b:RMW}_{\text{ra}}x=1/2$ shows event b reading value 1 from and writing value 2 to **x** and writing value 2 to **x** atomically. Fences have no associated values and atomic locations.
 
-Now, we can define relations. 
+Now, we can define relations that help us define the guarantees the C++11 memory model gives us. 
 
-#### Pre-exections
+#### Pre-executions
 
 * *sequenced-before (sb)* : an intra-thread relation that orders events by the order they appear in the program. Operations within an expression are ordered, so *sb* is not total within a thread
 * *additional-synchronises-with (asw)*: cause synchronization on thread launch and join
@@ -151,6 +151,6 @@ They also runs it on large applications, i.e. Chrome and Firefox.
 
 ## Conclusion
 
-The paper has presented a method for accurate dynamic race analysis for C++11 programs, and an instrumentation library that allows a large fragment of the C++11 relaxed memory model to be explored. Our experiments show that our implementation, an extension to tsan, can detect races that are beyond the scope of the original tool, and that our extended instrumentation still enables analysis of large applications—the Firefox and Chromium web browsers 
+The paper has presented a method for accurate dynamic race analysis for C++11 programs, and an instrumentation library that allows a large fragment of the C++11 relaxed memory model to be explored. Their experiments show that their implementation, an extension to tsan, can detect races that are beyond the scope of the original tool, and that their extended instrumentation still enables analysis of large applications—the Firefox and Chromium web browsers 
 
 
